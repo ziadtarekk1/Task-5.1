@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.js';
 import reviewRoutes from './routes/reviews.js';
 import userRoutes from './routes/users.js';
 import instructorRoutes from './routes/instructors.js';
+import mongoSanitize from 'express-mongo-sanitize';
 
 const app = express();
 
@@ -18,6 +19,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/instructors', instructorRoutes);
+app.use(mongoSanitize());
 
 // Not found
 app.use((req, res) => {

@@ -1,3 +1,6 @@
+
+import Joi from 'joi';
+import bcrypt from 'bcrypt';
 import { Instructor } from '../models/Instructor.js';
 
 // =============================================================================
@@ -14,6 +17,19 @@ import { Instructor } from '../models/Instructor.js';
 // This is the bug students must find and fix. Do not "clean this up".
 // =============================================================================
 
+// NEW: Validate login inputs
+const loginSchema = Joi.object({
+  username: Joi.string().trim().required(),
+  password: Joi.string().required()
+});
+
+// NEW: Allow only legitimate search parameters
+const searchSchema = Joi.object({
+  name: Joi.string().trim(),
+  department: Joi.string().trim(),
+  role: Joi.string().trim()
+}).unknown(false);
+
 function publicProfile(doc) {
   // A successful login is a "trophy": we deliberately return the sensitive
   // fields so a bypass clearly reveals what it compromised.
@@ -22,10 +38,7 @@ function publicProfile(doc) {
     name: doc.name,
     username: doc.username,
     department: doc.department,
-    role: doc.role,
-    apiKey: doc.apiKey,
-    privateEmail: doc.privateEmail,
-    privatePhone: doc.privatePhone
+    role: doc.role
   };
 }
 
@@ -43,12 +56,41 @@ export async function loginInstructor(req, res, next) {
     // filter that matches any account (authentication bypass). With
     // {"password":{"$regex":"^S"}} the success/failure response becomes an
     // oracle for extracting the stored password one character at a time.
-    const instructor = await Instructor.findOne({ username, password });
+
+    // NEW: Reject objects, operators and invalid input
+    const { error, value } = loginSchema.validate(req.body);
+
+    if (error) {
+      return res.status(400).json({
+        message: 'Invalid login input'
+      });
+    }
+
+    const instructor = await Instructor.findOne({
+      username: value.username
+    }).select('+password');
 
     if (!instructor) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({
+        message: 'Invalid credentials'
+      });
     }
-    return res.json({ instructor: publicProfile(instructor) });
+
+    // NEW: Compare against the stored bcrypt password hash
+    const validPassword = await bcrypt.compare(
+      value.password,
+      instructor.password
+    );
+
+    if (!validPassword) {
+      return res.status(401).json({
+        message: 'Invalid credentials'
+      });
+    }
+
+    return res.json({
+      instructor: publicProfile(instructor)
+    });
   } catch (err) {
     next(err);
   }
@@ -79,9 +121,40 @@ export async function searchInstructors(req, res, next) {
     //   ?role[$ne]=instructor           -> operator injection, leaks superadmin
     //   ?username[$regex]=^admin        -> regex enumeration
     //   ?$where=this.password.length>10 -> server-side JavaScript execution
-    const filter = req.query;
-    const instructors = await Instructor.find(filter).lean();
-    res.json({ count: instructors.length, instructors });
+
+    // NEW: Validate and reject unexpected search parameters
+    const { error, value } = searchSchema.validate(req.query);
+
+    if (error) {
+      return res.status(400).json({
+        message: 'Invalid search parameters'
+      });
+    }
+
+    // NEW: Build a safe filter using approved fields only
+    const filter = {};
+
+    if (value.name !== undefined) {
+      filter.name = value.name;
+    }
+
+    if (value.department !== undefined) {
+      filter.department = value.department;
+    }
+
+    if (value.role !== undefined) {
+      filter.role = value.role;
+    }
+
+    // NEW: Return only public fields
+    const instructors = await Instructor.find(filter)
+      .select('name department role')
+      .lean();
+
+    res.json({
+      count: instructors.length,
+      instructors
+    });
   } catch (err) {
     next(err);
   }
