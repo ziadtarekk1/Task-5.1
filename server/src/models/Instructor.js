@@ -1,4 +1,6 @@
+
 import mongoose from 'mongoose';
+import bcrypt from 'bcrypt';
 
 // Instructor Portal account.
 //
@@ -11,7 +13,7 @@ const instructorSchema = new mongoose.Schema(
     name: { type: String, required: true },
     username: { type: String, required: true, unique: true, trim: true },
     // ⚠️ VULNERABLE (lab): plaintext password, no bcrypt hashing.
-    password: { type: String, required: true },
+    password: { type: String, required: true, select: false },
     department: { type: String },
     role: { type: String, default: 'instructor' }, // 'instructor' | 'superadmin'
 
@@ -22,5 +24,12 @@ const instructorSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Hash the password before saving it
+instructorSchema.pre('save', async function () {
+  if (!this.isModified('password')) return;
+
+  this.password = await bcrypt.hash(this.password, 12);
+});
 
 export const Instructor = mongoose.model('Instructor', instructorSchema);

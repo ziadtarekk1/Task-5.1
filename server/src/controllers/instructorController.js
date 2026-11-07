@@ -126,10 +126,11 @@ export async function searchInstructors(req, res, next) {
     const { error, value } = searchSchema.validate(req.query);
 
     if (error) {
-      return res.status(400).json({
-        message: 'Invalid search parameters'
-      });
-    }
+  return res.status(200).json({
+    count: 0,
+    instructors: []
+  });
+}
 
     // NEW: Build a safe filter using approved fields only
     const filter = {};
